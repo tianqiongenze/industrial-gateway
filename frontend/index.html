@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>工业网关 | Industrial Gateway Dashboard</title>
+    <style>
+        :root{--bg-primary:#0f172a;--bg-secondary:#1e293b;--bg-card:#334155;--text-primary:#f1f5f9;--text-secondary:#94a3b8;--accent-blue:#3b82f6;--accent-green:#10b981;--accent-red:#ef4444;--accent-yellow:#f59e0b;--accent-purple:#8b5cf6;--accent-cyan:#06b6d4;--border:#475569;--radius:12px;--shadow:0 4px 6px -1px rgba(0,0,0,0.3)}
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:'Segoe UI',system-ui,sans-serif;background:linear-gradient(135deg,#0f172a,#1e293b);color:var(--text-primary);min-height:100vh;padding:20px}
+        .header{display:flex;justify-content:space-between;align-items:center;padding:20px 30px;background:var(--bg-secondary);border-radius:var(--radius);margin-bottom:20px;box-shadow:var(--shadow)}
+        .header h1{font-size:1.8rem;background:linear-gradient(135deg,var(--accent-cyan),var(--accent-blue));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+        .status-badge{padding:8px 16px;border-radius:20px;font-size:0.85rem;font-weight:600}
+        .status-healthy{background:rgba(16,185,129,0.15);color:var(--accent-green);border:1px solid rgba(16,185,129,0.3)}
+        .status-error{background:rgba(239,68,68,0.15);color:var(--accent-red);border:1px solid rgba(239,68,68,0.3)}
+        .status-loading{background:rgba(245,158,11,0.15);color:var(--accent-yellow);border:1px solid rgba(245,158,11,0.3)}
+        .grid{display:grid;gap:20px;max-width:1400px;margin:0 auto}
+        .row{display:grid;gap:20px}.row-4{grid-template-columns:repeat(4,1fr)}.row-2{grid-template-columns:1fr 1fr}
+        @media(max-width:1024px){.row-4{grid-template-columns:repeat(2,1fr)}.row-2{grid-template-columns:1fr}}
+        @media(max-width:640px){.row-4{grid-template-columns:1fr}}
+        .card{background:var(--bg-secondary);border-radius:var(--radius);padding:24px;box-shadow:var(--shadow);border:1px solid var(--border);transition:transform 0.2s}
+        .card:hover{transform:translateY(-2px)}
+        .card h3{font-size:1.1rem;margin-bottom:16px;color:var(--text-secondary)}
+        .stat-value{font-size:2.5rem;font-weight:700}
+        .stat-label{font-size:0.85rem;color:var(--text-secondary);margin-top:4px}
+        .stat-blue{color:var(--accent-blue)}.stat-green{color:var(--accent-green)}.stat-red{color:var(--accent-red)}.stat-yellow{color:var(--accent-yellow)}.stat-purple{color:var(--accent-purple)}.stat-cyan{color:var(--accent-cyan)}
+        input,select,button{background:var(--bg-card);border:1px solid var(--border);color:var(--text-primary);padding:10px 14px;border-radius:8px;font-size:0.9rem;outline:none}
+        input:focus,select:focus{border-color:var(--accent-blue)}
+        button{cursor:pointer;font-weight:600}
+        .btn-primary{background:var(--accent-blue);border:none}.btn-success{background:var(--accent-green);border:none}.btn-danger{background:var(--accent-red);border:none}
+        .form-group{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
+        .form-group label{font-size:0.8rem;color:var(--text-secondary);display:block;margin-bottom:4px}
+        table{width:100%;border-collapse:collapse}
+        th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--border)}
+        th{color:var(--text-secondary);font-size:0.8rem;text-transform:uppercase}
+        tr:hover{background:var(--bg-card)}
+        .badge{padding:4px 10px;border-radius:12px;font-size:0.75rem;font-weight:600}
+        .badge-normal{background:rgba(16,185,129,0.15);color:var(--accent-green)}.badge-warning{background:rgba(245,158,11,0.15);color:var(--accent-yellow)}.badge-critical{background:rgba(239,68,68,0.15);color:var(--accent-red)}
+        .toast{position:fixed;bottom:20px;right:20px;padding:16px 24px;border-radius:8px;background:var(--bg-card);border:1px solid var(--border);z-index:1000;display:none}
+        .toast.show{display:block;animation:slideIn 0.3s}
+        @keyframes slideIn{from{transform:translateX(100%)}to{transform:translateX(0)}}
+        .device-card{display:flex;align-items:center;gap:12px;padding:16px;background:var(--bg-card);border-radius:8px;border:1px solid var(--border)}
+        .device-icon{font-size:2rem}
+        .api-log{background:#0c1117;border-radius:8px;padding:12px;max-height:200px;overflow-y:auto;font-family:monospace;font-size:0.8rem}
+        .log-ok{color:var(--accent-green)}.log-err{color:var(--accent-red)}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🔌 工业网关监控平台</h1>
+        <div id="healthBadge" class="status-badge status-loading">检查中...</div>
+    </div>
+
+    <div class="grid">
+        <!-- Stats -->
+        <div class="row row-4">
+            <div class="card"><h3>📊 读取总数</h3><div class="stat-value stat-blue" id="statReadings">--</div><div class="stat-label">Total Readings</div></div>
+            <div class="card"><h3>💾 缓存类型</h3><div class="stat-value stat-purple" id="statCache">--</div><div class="stat-label">Cache Engine</div></div>
+            <div class="card"><h3>🟢 正常设备</h3><div class="stat-value stat-green" id="statNormal">--</div><div class="stat-label">Normal</div></div>
+            <div class="card"><h3>🔴 异常设备</h3><div class="stat-value stat-red" id="statAnomaly">--</div><div class="stat-label">Anomalies</div></div>
+        </div>
+
+        <!-- Ingest Data -->
+        <div class="card">
+            <h3>📥 手动采集数据</h3>
+            <div class="form-group">
+                <div><label>设备ID</label><input type="text" id="deviceId" value="SENSOR-001" style="width:140px"></div>
+                <div><label>指标</label><select id="metric"><option value="temperature">温度</option><option value="vibration">振动</option><option value="pressure">压力</option><option value="humidity">湿度</option><option value="rpm">转速</option></select></div>
+                <div><label>数值</label><input type="number" id="value" value="42.5" step="0.1" style="width:80px"></div>
+                <div><label>单位</label><input type="text" id="unit" value="°C" style="width:60px"></div>
+                <div><label>来源</label><select id="source"><option value="rest">REST</option><option value="mqtt">MQTT</option><option value="modbus">Modbus</option></select></div>
+                <button class="btn-primary" onclick="ingestData()">采集</button>
+                <button class="btn-success" onclick="sendBatch()">批量10条</button>
+            </div>
+        </div>
+
+        <!-- Device Status -->
+        <div class="card">
+            <h3>🖥️ 设备状态监控</h3>
+            <div id="deviceGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px"></div>
+        </div>
+
+        <!-- Latest Readings -->
+        <div class="card">
+            <h3>📋 最新读取数据</h3>
+            <div class="form-group" style="margin-bottom:16px">
+                <div><label>设备ID</label><input type="text" id="readingsDevice" value="SENSOR-001" style="width:140px"></div>
+                <button class="btn-primary" onclick="loadReadings()">查询最新</button>
+            </div>
+            <table>
+                <thead><tr><th>设备ID</th><th>指标</th><th>数值</th><th>单位</th><th>来源</th><th>状态</th><th>时间</th></tr></thead>
+                <tbody id="readingsTable"></tbody>
+            </table>
+        </div>
+
+        <!-- Device Management -->
+        <div class="card">
+            <h3>⚙️ 设备注册管理 (CRDB 读写分离 + Redis缓存)</h3>
+            <div class="form-group" style="margin-bottom:16px">
+                <div><label>设备ID</label><input type="text" id="newDevId" value="SENSOR-006" style="width:140px"></div>
+                <div><label>名称</label><input type="text" id="newDevName" value="压力传感器-006" style="width:160px"></div>
+                <div><label>协议</label><select id="newDevProto"><option value="modbus">Modbus</option><option value="mqtt">MQTT</option><option value="opcua">OPC-UA</option></select></div>
+                <button class="btn-success" onclick="createDevice()">注册设备</button>
+            </div>
+            <table>
+                <thead><tr><th>设备ID</th><th>名称</th><th>协议</th><th>操作</th></tr></thead>
+                <tbody id="deviceMgmtTable"></tbody>
+            </table>
+        </div>
+
+        <!-- API Log -->
+        <div class="card">
+            <h3>🔌 API 调用日志</h3>
+            <div class="api-log" id="apiLog"></div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        const API = window.location.origin.replace(/\/hub.*/, '') + '/api/v1';
+        function showToast(m){const t=document.getElementById('toast');t.textContent=m;t.className='toast show';setTimeout(()=>t.classList.remove('show'),3000)}
+        function logApi(m,u,s,d){const log=document.getElementById('apiLog');const e=document.createElement('div');e.className='log-entry '+(s>=200&&s<300?'log-ok':'log-err');e.textContent=`[${new Date().toLocaleTimeString()}] ${m} ${u} → ${s} ${d?JSON.stringify(d).substring(0,120):''}`;log.insertBefore(e,log.firstChild);while(log.children.length>30)log.removeChild(log.lastChild)}
+        async function apiCall(method,url,body){const opts={method,headers:{'Content-Type':'application/json'}};if(body)opts.body=JSON.stringify(body);try{const r=await fetch(url,opts);const d=await r.json().catch(()=>({}));logApi(method,url,r.status,d);return{status:r.status,data:d}}catch(e){logApi(method,url,'ERR',{error:e.message});return{status:0,data:{error:e.message}}}}
+
+        async function checkHealth(){const badge=document.getElementById('healthBadge');const r=await apiCall('GET',API+'/health');if(r.status===200){badge.className='status-badge status-healthy';badge.textContent='✅ 网关正常';document.getElementById('statReadings').textContent=r.data.readings;document.getElementById('statCache').textContent=r.data.cache}else{badge.className='status-badge status-error';badge.textContent='❌ 网关异常'}}
+
+        async function ingestData(){const body={device_id:document.getElementById('deviceId').value,metric:document.getElementById('metric').value,value:parseFloat(document.getElementById('value').value),unit:document.getElementById('unit').value,source:document.getElementById('source').value};const r=await apiCall('POST',API+'/ingest',body);if(r.status===201){showToast('✅ 采集成功: '+r.data.status);checkHealth();refreshDevices()}else showToast('❌ 失败: '+(r.data.error||''))}
+
+        async function sendBatch(){let ok=0;for(let i=0;i<10;i++){const v=40+Math.random()*10+(i>7?15:0);const r=await apiCall('POST',API+'/ingest',{device_id:document.getElementById('deviceId').value,metric:document.getElementById('metric').value,value:parseFloat(v.toFixed(1)),unit:document.getElementById('unit').value,source:'batch'});if(r.status===201)ok++;await new Promise(r=>setTimeout(r,50))}showToast(`批量完成: ${ok}/10 成功`);checkHealth();refreshDevices()}
+
+        const devices=['SENSOR-001','SENSOR-002','SENSOR-003','PUMP-001','PUMP-002'];
+        async function refreshDevices(){const grid=document.getElementById('deviceGrid');let normal=0,anomaly=0;grid.innerHTML='';for(const d of devices){const r=await apiCall('GET',API+`/status/${d}`);const card=document.createElement('div');card.className='device-card';if(r.status===200){const st=r.data.status;const icon=st==='normal'?'🟢':st==='warning'?'🟡':'🔴';const cls=st==='normal'?'badge-normal':st==='warning'?'badge-warning':'badge-critical';if(st==='normal')normal++;else anomaly++;card.innerHTML=`<div class="device-icon">${icon}</div><div><div style="font-weight:600">${d}</div><span class="badge ${cls}">${st.toUpperCase()}</span></div>`}else{card.innerHTML=`<div class="device-icon">⚪</div><div><div style="font-weight:600">${d}</div><span class="badge badge-warning">NO DATA</span></div>`}grid.appendChild(card)}document.getElementById('statNormal').textContent=normal;document.getElementById('statAnomaly').textContent=anomaly}
+
+        async function loadReadings(){const dev=document.getElementById('readingsDevice').value;const r=await apiCall('GET',API+`/readings/${dev}`);const tbody=document.getElementById('readingsTable');tbody.innerHTML='';if(r.status===200&&r.data.readings){r.data.readings.forEach(rd=>{const st=domainClassify(rd.metric,rd.value);const cls=st==='normal'?'badge-normal':st==='warning'?'badge-warning':'badge-critical';const row=document.createElement('tr');row.innerHTML=`<td>${rd.device_id||rd.deviceId}</td><td>${rd.metric}</td><td>${rd.value}</td><td>${rd.unit||''}</td><td>${rd.source||''}</td><td><span class="badge ${cls}">${st}</span></td><td>${rd.timestamp||rd.Timestamp||'-'}</td>`;tbody.appendChild(row)})}}
+
+        function domainClassify(metric,val){if(metric==='temperature'&&(val>80||val<10))return val>90?'critical':'warning';if(metric==='vibration'&&val>7)return val>10?'critical':'warning';if(metric==='pressure'&&(val>100||val<20))return'warning';return'normal'}
+
+        async function createDevice(){const body={id:document.getElementById('newDevId').value,name:document.getElementById('newDevName').value,protocol:document.getElementById('newDevProto').value};const r=await apiCall('POST',API+'/devices',body);if(r.status===201){showToast('✅ 设备已注册');loadDevices()}else showToast('❌ 注册失败: '+(r.data.error||''))}
+
+        async function loadDevices(){const r=await apiCall('GET',API+'/devices');const tbody=document.getElementById('deviceMgmtTable');tbody.innerHTML='';if(r.status===200&&Array.isArray(r.data)){r.data.forEach(d=>{const row=document.createElement('tr');row.innerHTML=`<td>${d.id||d.ID}</td><td>${d.name||d.Name}</td><td>${d.protocol||d.Protocol||'-'}</td><td><button class="btn-danger" onclick="deleteDevice('${d.id||d.ID}')">删除</button></td>`;tbody.appendChild(row)})}}
+
+        checkHealth();refreshDevices();loadDevices();setInterval(checkHealth,30000);
+    </script>
+</body>
+</html>
